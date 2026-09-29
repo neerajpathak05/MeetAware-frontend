@@ -14,6 +14,10 @@ function MeetingRecorder({ meetingId, onTranscriptUpdate }) {
   const API_URL =
     import.meta.env.VITE_API_URL || "http://localhost:5000";
 
+  // =====================================================
+  // CLEANUP DISPLAY STREAM
+  // =====================================================
+
   const cleanupDisplayStream = () => {
     if (displayStreamRef.current) {
       displayStreamRef.current
@@ -23,6 +27,10 @@ function MeetingRecorder({ meetingId, onTranscriptUpdate }) {
       displayStreamRef.current = null;
     }
   };
+
+  // =====================================================
+  // START RECORDING
+  // =====================================================
 
   const startRecording = async () => {
     try {
@@ -58,9 +66,7 @@ function MeetingRecorder({ meetingId, onTranscriptUpdate }) {
 
       displayStreamRef.current = displayStream;
 
-      const audioStream = new MediaStream(
-        audioTracks
-      );
+      const audioStream = new MediaStream(audioTracks);
 
       chunksRef.current = [];
 
@@ -91,11 +97,19 @@ function MeetingRecorder({ meetingId, onTranscriptUpdate }) {
 
       mediaRecorderRef.current = recorder;
 
+      // =====================================================
+      // AUDIO DATA
+      // =====================================================
+
       recorder.ondataavailable = (event) => {
         if (event.data.size > 0) {
           chunksRef.current.push(event.data);
         }
       };
+
+      // =====================================================
+      // RECORDING ERROR
+      // =====================================================
 
       recorder.onerror = (event) => {
         console.error(
@@ -104,12 +118,17 @@ function MeetingRecorder({ meetingId, onTranscriptUpdate }) {
         );
 
         setIsRecording(false);
+
         cleanupDisplayStream();
 
         setStatus(
           "Recording error occurred. Please try again."
         );
       };
+
+      // =====================================================
+      // RECORDING STARTED
+      // =====================================================
 
       recorder.onstart = () => {
         console.log("Recording started");
@@ -120,6 +139,10 @@ function MeetingRecorder({ meetingId, onTranscriptUpdate }) {
           "Recording meeting audio... Click Stop Meeting Capture when finished."
         );
       };
+
+      // =====================================================
+      // RECORDING STOPPED
+      // =====================================================
 
       recorder.onstop = async () => {
         console.log("Recording stopped");
@@ -154,6 +177,10 @@ function MeetingRecorder({ meetingId, onTranscriptUpdate }) {
         await uploadAudio(audioBlob);
       };
 
+      // =====================================================
+      // SCREEN SHARING ENDED
+      // =====================================================
+
       const videoTrack =
         displayStream.getVideoTracks()[0];
 
@@ -177,7 +204,9 @@ function MeetingRecorder({ meetingId, onTranscriptUpdate }) {
         );
       }
 
+      // Start recording
       recorder.start(1000);
+
     } catch (error) {
       console.error(
         "Screen/audio capture error:",
@@ -185,6 +214,7 @@ function MeetingRecorder({ meetingId, onTranscriptUpdate }) {
       );
 
       setIsRecording(false);
+
       cleanupDisplayStream();
 
       if (error.name === "NotAllowedError") {
@@ -207,6 +237,10 @@ function MeetingRecorder({ meetingId, onTranscriptUpdate }) {
     }
   };
 
+  // =====================================================
+  // STOP RECORDING
+  // =====================================================
+
   const stopRecording = () => {
     console.log("Stop button clicked");
 
@@ -218,6 +252,10 @@ function MeetingRecorder({ meetingId, onTranscriptUpdate }) {
       mediaRecorderRef.current.stop();
     }
   };
+
+  // =====================================================
+  // UPLOAD AUDIO
+  // =====================================================
 
   const uploadAudio = async (audioBlob) => {
     try {
@@ -273,6 +311,10 @@ function MeetingRecorder({ meetingId, onTranscriptUpdate }) {
         data
       );
 
+      // =====================================================
+      // SESSION EXPIRED
+      // =====================================================
+
       if (response.status === 401) {
         localStorage.removeItem("token");
         localStorage.removeItem("user");
@@ -284,6 +326,10 @@ function MeetingRecorder({ meetingId, onTranscriptUpdate }) {
         return;
       }
 
+      // =====================================================
+      // API ERROR
+      // =====================================================
+
       if (!response.ok) {
         throw new Error(
           data.message ||
@@ -291,35 +337,39 @@ function MeetingRecorder({ meetingId, onTranscriptUpdate }) {
         );
       }
 
-      /*
-       * We intentionally do not overwrite the Google Meet
-       * transcript here.
-       *
-       * Google Meet transcript:
-       * - may contain participant IDs
-       * - can be mapped to participant names
-       *
-       * Audio transcription:
-       * - may only contain Speaker 1 / Speaker 2
-       * - may contain Unknown Speaker
-       *
-       * Therefore the current architecture keeps the
-       * Google Meet transcript as the primary transcript.
-       */
+      // =====================================================
+      // UPDATE FRONTEND TRANSCRIPT
+      // =====================================================
 
       console.log(
         "Audio transcription completed.",
         data.transcript || []
       );
 
-      if (onTranscriptUpdate && data.transcript) {
-        // Intentionally not called automatically.
-        // Kept available for future transcript strategy.
+      if (
+        onTranscriptUpdate &&
+        Array.isArray(data.transcript)
+      ) {
+        onTranscriptUpdate(data.transcript);
       }
 
-      setStatus(
-        "Meeting audio transcribed successfully."
-      );
+      // =====================================================
+      // TRANSCRIPT RESULT
+      // =====================================================
+
+      if (
+        Array.isArray(data.transcript) &&
+        data.transcript.length > 0
+      ) {
+        setStatus(
+          "Meeting audio transcribed successfully."
+        );
+      } else {
+        setStatus(
+          "Audio uploaded, but no transcript entries were generated."
+        );
+      }
+
     } catch (error) {
       console.error(
         "Audio/transcription error:",
@@ -333,6 +383,10 @@ function MeetingRecorder({ meetingId, onTranscriptUpdate }) {
       );
     }
   };
+
+  // =====================================================
+  // UI
+  // =====================================================
 
   return (
     <div className="rounded-xl bg-white p-6 shadow">
